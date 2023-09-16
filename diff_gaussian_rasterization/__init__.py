@@ -40,7 +40,7 @@ def rasterize_gaussians(
     return _RasterizeGaussians.apply(
         means3D,
         means2D,
-        sh,
+        sh.contiguous(),
         colors_precomp,
         opacities,
         scales,
@@ -218,7 +218,7 @@ class GaussianRasterizer(nn.Module):
 
         tensors = dict(means2D=means2D, means3D=means3D, opacities=opacities, shs=shs, colors_precomp=colors_precomp, scales=scales, rotations=rotations, cov3D_precomp=cov3D_precomp)
         for name, tensor in tensors.items():
-            print(f"{name}: {tensor.shape}")
+            print(f"{name:<15}: {tuple(tensor.shape)} {(tensor.mean(dim=0), tensor.std(dim=0))} {tensor.device} {tensor.dtype} {tensor.is_contiguous()}")
 
         for k, v in asdict(raster_settings).items():
             print(f"{k}: {v}")
