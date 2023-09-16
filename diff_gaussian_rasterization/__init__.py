@@ -14,9 +14,17 @@ import torch.nn as nn
 import torch
 from . import _C
 
-def cpu_deep_copy_tuple(input_tuple):
-    copied_tensors = [item.cpu().clone() if isinstance(item, torch.Tensor) else item for item in input_tuple]
-    return tuple(copied_tensors)
+import copy
+
+from dataclasses import asdict, dataclass
+from jaxtyping import Float32, jaxtyped
+from beartype import beartype
+from torch import Tensor
+
+def typechecked(fn):
+    return beartype(jaxtyped(fn))
+
+
 
 def rasterize_gaussians(
     means3D,
@@ -81,7 +89,7 @@ class _RasterizeGaussians(torch.autograd.Function):
 
         # Invoke C++/CUDA rasterizer
         if raster_settings.debug:
-            cpu_args = cpu_deep_copy_tuple(args) # Copy them before they can be corrupted
+            cpu_args = copy.deepcopy(args) # Copy them before they can be corrupted
             try:
                 num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer = _C.rasterize_gaussians(*args)
             except Exception as ex:
@@ -130,7 +138,7 @@ class _RasterizeGaussians(torch.autograd.Function):
 
         # Compute gradients for relevant tensors by invoking backward method
         if raster_settings.debug:
-            cpu_args = cpu_deep_copy_tuple(args) # Copy them before they can be corrupted
+            cpu_args = copy.deepcopy(args) # Copy them before they can be corrupted
             try:
                 grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations = _C.rasterize_gaussians_backward(*args)
             except Exception as ex:
@@ -154,7 +162,9 @@ class _RasterizeGaussians(torch.autograd.Function):
 
         return grads
 
-class GaussianRasterizationSettings(NamedTuple):
+@typechecked
+@dataclass
+class GaussianRasterizationSettings:
     image_height: int
     image_width: int 
     tanfovx : float
@@ -205,6 +215,13 @@ class GaussianRasterizer(nn.Module):
             rotations = torch.Tensor([])
         if cov3D_precomp is None:
             cov3D_precomp = torch.Tensor([])
+
+        tensors = dict(means2D=means2D, means3D=means3D, opacities=opacities, shs=shs, colors_precomp=colors_precomp, scales=scales, rotations=rotations, cov3D_precomp=cov3D_precomp)
+        for name, tensor in tensors.items():
+            print(f"{name}: {tensor.shape}")
+
+        for k, v in asdict(raster_settings).items():
+            print(f"{k}: {v}")
 
         # Invoke C++/CUDA rasterization routine
         return rasterize_gaussians(
