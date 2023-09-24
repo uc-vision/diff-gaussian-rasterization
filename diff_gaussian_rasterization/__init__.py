@@ -16,10 +16,9 @@ from . import _C
 
 import copy
 
-from dataclasses import asdict, dataclass
-from jaxtyping import Float32, jaxtyped
+from dataclasses import  dataclass
+from jaxtyping import jaxtyped
 from beartype import beartype
-from torch import Tensor
 
 def typechecked(fn):
     return beartype(jaxtyped(fn))
@@ -197,31 +196,20 @@ class GaussianRasterizer(nn.Module):
     def forward(self, means3D, means2D, opacities, shs = None, colors_precomp = None, scales = None, rotations = None, cov3D_precomp = None):
         
         raster_settings = self.raster_settings
-
-        if (shs is None and colors_precomp is None) or (shs is not None and colors_precomp is not None):
-            raise Exception('Please provide excatly one of either SHs or precomputed colors!')
-        
-        if ((scales is None or rotations is None) and cov3D_precomp is None) or ((scales is not None or rotations is not None) and cov3D_precomp is not None):
-            raise Exception('Please provide exactly one of either scale/rotation pair or precomputed 3D covariance!')
-        
-        if shs is None:
-            shs = torch.Tensor([])
-        if colors_precomp is None:
-            colors_precomp = torch.Tensor([])
-
-        if scales is None:
-            scales = torch.Tensor([])
-        if rotations is None:
-            rotations = torch.Tensor([])
         if cov3D_precomp is None:
             cov3D_precomp = torch.Tensor([])
+            assert scales is not None and rotations is not None, \
+              "scales and rotations must be provided if cov3D_precomp is not provided"
+        else:
+            scales = torch.Tensor([])
+            rotations = torch.Tensor([])
 
-        tensors = dict(means2D=means2D, means3D=means3D, opacities=opacities, shs=shs, colors_precomp=colors_precomp, scales=scales, rotations=rotations, cov3D_precomp=cov3D_precomp)
-        for name, tensor in tensors.items():
-            print(f"{name:<15}: {tuple(tensor.shape)} {(tensor.mean(dim=0), tensor.std(dim=0))} {tensor.device} {tensor.dtype} {tensor.is_contiguous()}")
-
-        for k, v in asdict(raster_settings).items():
-            print(f"{k}: {v}")
+        if shs is None:
+            shs = torch.Tensor([])
+            assert colors_precomp is not None, \
+              "colors_precomp must be provided if shs is not provided"
+        else:
+            colors_precomp = torch.Tensor([])
 
         # Invoke C++/CUDA rasterization routine
         return rasterize_gaussians(
